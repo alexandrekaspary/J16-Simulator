@@ -74,9 +74,11 @@ workflows:
         submit_to_testflight: true
 
   # ------------------------------------------------------------------ iOS (sem assinatura)
-  # Só para conferir se o projeto iOS compila, sem precisar de conta Apple.
+  # Não precisa de conta Apple paga. Gera um .ipa sem assinatura que pode ser
+  # instalado no iPhone com Sideloadly/AltStore usando um Apple ID gratuito
+  # (a assinatura gratuita vale 7 dias; depois é só reinstalar).
   ios-unsigned:
-    name: iOS (build sem assinatura)
+    name: iOS (IPA sem assinatura)
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -86,6 +88,8 @@ workflows:
       - name: Build iOS sem assinatura
         script: |
           flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
-          cd build/ios/iphoneos && zip -r ../../../Runner-unsigned.zip Runner.app
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr J16-Simulator-unsigned.ipa Payload
     artifacts:
-      - Runner-unsigned.zip
+      - J16-Simulator-unsigned.ipa
