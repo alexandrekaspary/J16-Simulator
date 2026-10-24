@@ -1,0 +1,91 @@
+# Codemagic — J16 Simulator (Android + iOS)
+# Docs: https://docs.codemagic.io/yaml-quick-start/building-a-flutter-app/
+
+definitions:
+  env: &env
+    flutter: stable
+    xcode: latest
+    cocoapods: default
+  scripts:
+    - &pub_get
+      name: Instalar dependências
+      script: flutter pub get
+    - &tests
+      name: Análise e testes
+      script: |
+        flutter analyze
+        flutter test
+
+workflows:
+  # ------------------------------------------------------------------ ANDROID
+  android-release:
+    name: Android (APK + AAB)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      <<: *env
+      # Para assinar com a sua chave: envie a keystore em
+      # Team settings > Code signing identities > Android keystores
+      # e descomente as linhas abaixo com o nome de referência que você usou.
+      # Sem isso o APK é assinado com a chave debug (instala normalmente).
+      # android_signing:
+      #   - j16_keystore
+    scripts:
+      - *pub_get
+      - *tests
+      - name: Build APK
+        script: flutter build apk --release --build-number=$BUILD_NUMBER
+      - name: Build AAB (Play Store)
+        script: flutter build appbundle --release --build-number=$BUILD_NUMBER
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk
+      - build/app/outputs/bundle/release/app-release.aab
+
+  # ------------------------------------------------------------------ iOS (assinado)
+  ios-release:
+    name: iOS (IPA assinado / TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      # Crie em Team settings > Integrations > App Store Connect
+      # uma chave de API com este nome.
+      app_store_connect: codemagic
+    environment:
+      <<: *env
+      ios_signing:
+        distribution_type: app_store # ou ad_hoc para instalar direto em aparelhos cadastrados
+        bundle_identifier: com.solverpro.j16simulator
+    scripts:
+      - *pub_get
+      - *tests
+      - name: Aplicar perfis de assinatura
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+
+  # ------------------------------------------------------------------ iOS (sem assinatura)
+  # Só para conferir se o projeto iOS compila, sem precisar de conta Apple.
+  ios-unsigned:
+    name: iOS (build sem assinatura)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *env
+    scripts:
+      - *pub_get
+      - name: Build iOS sem assinatura
+        script: |
+          flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
+          cd build/ios/iphoneos && zip -r ../../../Runner-unsigned.zip Runner.app
+    artifacts:
+      - Runner-unsigned.zip
